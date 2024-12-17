@@ -13,3 +13,5 @@ OLD_URL = "https://www.alis-is.com"
 
 NEW_CLIENT = EspoAPI(NEW_URL, NEW_CRM_API_KEY)
 OLD_CLIENT = EspoAPI(OLD_URL, OLD_CRM_API_KEY)
+
+LOGGING_PATH = os.getenv('LOGGING_PATH')

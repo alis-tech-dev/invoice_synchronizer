@@ -4,14 +4,14 @@ from datetime import date, timedelta
 from typing import Optional, Dict, Any, List
 from rapidfuzz import fuzz
 from espo_api_client import EspoAPIError
-from data import OLD_CLIENT, NEW_CLIENT
+from data import OLD_CLIENT, NEW_CLIENT, LOGGING_PATH
 
 logging.basicConfig(
     level=logging.ERROR,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("/crm/invoice_reader.log"),
+        logging.FileHandler(LOGGING_PATH),
     ],
 )
 
