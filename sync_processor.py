@@ -49,11 +49,12 @@ def invoice_processor():
             account_id = sales_order["account1Id"]
             account = get_account(account_id)
             contacts = get_contacts(account_id)
+            contact = contacts[0] if contacts else None
             use_case_ids = get_use_case_ids(sales_order_id)
             for use_case_id in use_case_ids:
                 temp_items = get_use_case_items(use_case_id)
                 items.extend(temp_items)
-            invoice = create_invoice(sales_order, items, account, contacts[0])
+            invoice = create_invoice(sales_order, items, account, contact)
             sales_order["invoiceId"] = invoice["id"]
             sales_order["invoiceNumber"] = invoice["number"]
             sales_order["invoiceUrl"] = "https://www.crm.alis-is.com/#Invoice/view/" + invoice["id"]
@@ -75,7 +76,7 @@ def get_sent_to_pohoda(sales_orders):
 
 
 def change_status(sales_order):
-    res = OLD_CLIENT.request(
+    OLD_CLIENT.request(
         "PUT",
         f"BusinessProject/{sales_order["id"]}",
         {
@@ -124,10 +125,11 @@ def get_contacts(account_id):
         ]
     }
     response = OLD_CLIENT.request("GET", "Contact", params)
+    print(response["list"])
     return response["list"]
 
 
-def create_invoice(sales_order, sales_order_items, account, contact):
+def create_invoice(sales_order, sales_order_items, account, contact = None):
     today = date.today()
     payday = today + timedelta(days=14)
     data = {
@@ -159,11 +161,14 @@ def create_invoice(sales_order, sales_order_items, account, contact):
     else:
         company = NEW_CLIENT.request("POST", "Account", account)
         company_id = company["id"]
-        contact = NEW_CLIENT.request("POST", "Contact", contact)
-        contact_id = contact["id"]
-        NEW_CLIENT.request("PUT", f"Contact/{contact_id}", {"accountId": company_id})
+
+        if contact:
+            contact = NEW_CLIENT.request("POST", "Contact", contact)
+            contact_id = contact["id"]
+            NEW_CLIENT.request("PUT", f"Contact/{contact_id}", {"accountId": company_id})
+            data["billingContactId"] = contact_id
         data["accountId"] = company_id
-        data["billingContactId"] = contact_id
+
 
     invoice = NEW_CLIENT.request("POST", "Invoice", data)
     create_invoice_items(invoice["id"], sales_order_items)
