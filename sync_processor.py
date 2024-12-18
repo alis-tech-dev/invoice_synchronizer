@@ -276,7 +276,7 @@ def create_invoice(
             "shippingAddressStreet": sales_order["shippingAddressStreet"],
             "assignedUserId": "600169c78971cbc75",
             "dateInvoiced": today.strftime("%Y-%m-%d"),
-            "payday": payday.strftime("%Y-%m-%d"),
+            "payday": payday.strftime("%Y-%m-%d")
         }
 
         company_name = account["name"]
@@ -382,9 +382,15 @@ def create_invoice_items(
     """
     try:
         for item in items:
-            item["parentId"] = invoice_id
-            item["parentType"] = "Invoice"
-            NEW_CLIENT.request("POST", "InvoiceItem", item)
+            payload = {
+                "name": item["name"],
+                "quantity": item["quantity"],
+                "unitPrice": item["listPrice"],
+                "discount": item["discount"],
+                "taxRate": item["taxRate"],
+                "invoiceId": invoice_id,
+            }
+            NEW_CLIENT.request("POST", "InvoiceItem", payload)
     except EspoAPIError as e:
         logging.error(f"Error creating invoice items for {invoice_id}: {e}")
 
