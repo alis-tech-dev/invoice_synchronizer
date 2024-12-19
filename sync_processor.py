@@ -304,7 +304,7 @@ def create_invoice(
             data["accountId"] = company_id
 
         invoice = NEW_CLIENT.request("POST", "Invoice", data)
-        create_invoice_items(invoice["id"], sales_order_items)
+        create_invoice_items(invoice["id"], sales_order_items, company_dic)
         return invoice
     except EspoAPIError as e:
         logging.error(
@@ -371,7 +371,9 @@ def get_company(
 
 
 def create_invoice_items(
-    invoice_id: str, items: List[Dict[str, Any]]
+    invoice_id: str,
+    items: List[Dict[str, Any]],
+    company_dic: str = None,
 ) -> None:
     """
     Create items for an invoice.
@@ -380,6 +382,12 @@ def create_invoice_items(
         invoice_id (str): The invoice ID.
         items (List[Dict[str, Any]]): List of items to create.
     """
+    print("company dic", company_dic)
+    print("company dic lower", company_dic.lower())
+
+    tax_rate = 21 if company_dic.lower().startswith("cz") else None
+    print("tax rate", tax_rate)
+
     try:
         for item in items:
             payload = {
@@ -387,7 +395,7 @@ def create_invoice_items(
                 "quantity": item["quantity"],
                 "unitPrice": item["listPrice"],
                 "discount": item["discount"],
-                "taxRate": item["taxRate"],
+                "taxRate": tax_rate,
                 "invoiceId": invoice_id,
             }
             NEW_CLIENT.request("POST", "InvoiceItem", payload)
