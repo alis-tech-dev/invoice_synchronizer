@@ -2,7 +2,6 @@ import logging
 import time
 from datetime import date, timedelta
 from typing import Optional, Dict, Any, List
-from rapidfuzz import fuzz
 from espo_api_client import EspoAPIError
 from data import OLD_CLIENT, NEW_CLIENT, LOGGING_PATH
 
@@ -277,11 +276,10 @@ def create_invoice(
             "salesOrderUrl": f"https://www.alis-is.com/#BusinessProject/view/{sales_order["id"]}"
         }
 
-        company_name = account["name"]
         company_sic = account["sicCode"]
         company_dic = account["dic"]
+        company = get_company(company_sic, company_dic)
 
-        company = get_company(company_name, company_sic, company_dic)
         if company:
             company_id = company["id"]
             data["accountId"] = company_id
@@ -329,20 +327,15 @@ def get_invoice(invoice_id: str) -> Dict[str, Any]:
 
 
 def get_company(
-    name: Optional[str] = None,
     sic: Optional[str] = None,
     dic: Optional[str] = None,
-    threshold: int = 85,
 ) -> Optional[Dict[str, Any]]:
     """
     Retrieve a company by name, SIC, or DIC with a similarity threshold.
 
     Args:
-        name (Optional[str]): Name of the company.
         sic (Optional[str]): SIC code of the company.
         dic (Optional[str]): DIC code of the company.
-        threshold (int): Similarity threshold for name matching.
-
     Returns:
         Optional[Dict[str, Any]]: The matched company or None.
     """
@@ -372,7 +365,7 @@ def create_invoice_items(
     Args:
         invoice_id (str): The invoice ID.
         items (List[Dict[str, Any]]): List of items to create.
-        company_dic str: DIC code of the company.
+        company_dic (str): DIC code of the company.
     """
     tax_rate = 21 if company_dic.lower().startswith("cz") else None
     try:
