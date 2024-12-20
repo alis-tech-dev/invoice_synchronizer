@@ -68,71 +68,68 @@ def invoice_processor() -> None:
     """
     try:
         sales_orders = get_sales_orders("BusinessProject", OLD_CLIENT)
-        if not sales_orders:
-            time.sleep(300)
+        if sales_orders:
+            for sales_order in sales_orders:
 
-        for sales_order in sales_orders:
-            items = []
-            sales_order_id = sales_order["id"]
-            account_id = sales_order["account1Id"]
-            account = get_account(account_id)
-            contacts = get_contacts(account_id)
-            contact = contacts[0] if contacts else None
-            use_case_ids = get_use_case_ids(sales_order_id)
-            for use_case_id in use_case_ids:
-                temp_items = get_use_case_items(use_case_id)
-                items.extend(temp_items)
-            invoice = create_invoice(sales_order, items, account, contact)
-            sales_order["invoiceId"] = invoice["id"]
-            sales_order["invoiceNumber"] = invoice["number"]
-            sales_order["invoiceUrl"] = (
-                f"https://www.crm.alis-is.com/#Invoice/view/{invoice['id']}"
-            )
+                if get_sent_to_pohoda(sales_order):
+                    continue
 
-        get_sent_to_pohoda(sales_orders)
+                items = []
+                sales_order_id = sales_order["id"]
+                account_id = sales_order["account1Id"]
+                account = get_account(account_id)
+                contacts = get_contacts(account_id)
+                contact = contacts[0] if contacts else None
+                use_case_ids = get_use_case_ids(sales_order_id)
+                for use_case_id in use_case_ids:
+                    temp_items = get_use_case_items(use_case_id)
+                    items.extend(temp_items)
+                invoice = create_invoice(sales_order, items, account, contact)
+                if invoice:
+                    payload = {
+                        "invoiceUrl": f"https://www.crm.alis-is.com/#Invoice/view/{invoice["id"]}",
+                        "invoiceNumber": invoice["number"],
+                        "invoiceForeignId": invoice["id"]
+                    }
+                    update_sales_order(sales_order, payload)
+
     except Exception as e:
         logging.error(f"Error processing invoices: {e}")
-        time.sleep(360)
+        time.sleep(60)
 
 
-def get_sent_to_pohoda(sales_orders: List[Dict[str, Any]]) -> None:
+def get_sent_to_pohoda(sales_order: Dict[str, Any]) -> bool:
     """
     Check if invoices have been sent to Pohoda and update sales order statuses.
 
     Args:
-        sales_orders (List[Dict[str, Any]]): List of sales orders to process.
+        sales_order (List[Dict[str, Any]]): List of sales orders to process.
     """
-    time.sleep(360)
-    for sales_order in sales_orders:
-        try:
-            invoice_id = sales_order["invoiceId"]
+    try:
+        invoice_id = sales_order["invoiceForeignId"]
+        if invoice_id:
             invoice = get_invoice(invoice_id)
-            is_sent_to_pohoda = invoice["processed"]
-            if is_sent_to_pohoda:
-                change_status(sales_order)
-        except Exception as e:
-            logging.error(
-                f"Error processing invoice for sales order {sales_order['id']}: {e}"
-            )
+            is_sent_to_pohoda = invoice["sendStatus"]
+            if is_sent_to_pohoda == "Sent":
+                update_sales_order(sales_order, {"status": "Finished"})
+            return True
+        return False
+    except Exception as e:
+        logging.error(
+            f"Error processing invoice for sales order {sales_order['id']}: {e}"
+        )
 
 
-def change_status(sales_order: Dict[str, Any]) -> None:
+def update_sales_order(sales_order: Dict[str, Any], data) -> None:
     """
     Update the status of a sales order to 'Finished'.
 
     Args:
         sales_order (Dict[str, Any]): The sales order to update.
+        data (Dict[str, Any]): The data to update.
     """
     try:
-        OLD_CLIENT.request(
-            "PUT",
-            f"BusinessProject/{sales_order['id']}",
-            {
-                "status": "Finished",
-                "invoiceUrl": sales_order["invoiceUrl"],
-                "invoiceNumber": sales_order["invoiceNumber"],
-            },
-        )
+        OLD_CLIENT.request("PUT", f"BusinessProject/{sales_order['id']}", data)
     except EspoAPIError as e:
         logging.error(
             f"Error changing status for sales order {sales_order['id']}: {e}"
@@ -276,7 +273,8 @@ def create_invoice(
             "shippingAddressStreet": sales_order["shippingAddressStreet"],
             "assignedUserId": "600169c78971cbc75",
             "dateInvoiced": today.strftime("%Y-%m-%d"),
-            "payday": payday.strftime("%Y-%m-%d")
+            "payday": payday.strftime("%Y-%m-%d"),
+            "salesOrderUrl": f"https://www.alis-is.com/#BusinessProject/view/{sales_order["id"]}"
         }
 
         company_name = account["name"]
@@ -349,22 +347,15 @@ def get_company(
         Optional[Dict[str, Any]]: The matched company or None.
     """
     try:
-        companies = get_entities("Account")
-        for company in companies:
-            dic_code, sic_code, company_name = (
-                company["dic"],
-                company["sicCode"],
-                company["name"],
-            )
-            similarity = fuzz.partial_ratio(
-                name.lower(), company_name.lower()
-            ) if name else 0
-            if dic and dic == dic_code:
-                return company
-            elif sic and sic == sic_code:
-                return company
-            elif similarity > threshold:
-                return company
+        company = []
+        if dic:
+            company = get_entity("Account", "dic", dic)
+        if not company and sic:
+            company = get_entity("Account", "sicCode", sic)
+        if company:
+            return company[0]
+        return None
+
     except EspoAPIError as e:
         logging.error(f"Error fetching companies: {e}")
     return None
@@ -381,13 +372,9 @@ def create_invoice_items(
     Args:
         invoice_id (str): The invoice ID.
         items (List[Dict[str, Any]]): List of items to create.
+        company_dic str: DIC code of the company.
     """
-    print("company dic", company_dic)
-    print("company dic lower", company_dic.lower())
-
     tax_rate = 21 if company_dic.lower().startswith("cz") else None
-    print("tax rate", tax_rate)
-
     try:
         for item in items:
             payload = {
@@ -453,3 +440,4 @@ def get_entity(
 if __name__ == '__main__':
     while True:
         invoice_processor()
+        time.sleep(120)
